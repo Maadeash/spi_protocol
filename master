@@ -1,171 +1,152 @@
-module spi_master(
+module spi_master (
+    input  wire       clk,
+    input  wire       rst,
+    input  wire       start,
+    input  wire [7:0] data_in,
+    input  wire       miso,
 
-    input wire clk,
-    input wire rst,
-    input wire start,
-    input wire [7:0] data_in,
-    input wire miso,
-
-    output reg mosi,
-    output wire sclk,
-    output reg cs,
-
-    output reg [7:0] data_out,
-    output reg busy,
-    output reg done
+    output reg        mosi,
+    output reg        sclk,
+    output reg        cs,
+    output reg [7:0]  data_out,
+    output reg        busy,
+    output reg        done
 );
 
-parameter IDLE     = 2'b00;
-parameter LOAD     = 2'b01;
-parameter TRANSFER = 2'b10;
-parameter FINISH   = 2'b11;
+    localparam IDLE     = 2'b00;
+    localparam LOAD     = 2'b01;
+    localparam TRANSFER = 2'b10;
+    localparam FINISH   = 2'b11;
 
-reg [1:0] state;
+    reg [1:0] state;
 
-reg [7:0] shift_reg;
-reg [2:0] bit_cnt;
+    reg [7:0] tx_shift;
+    reg [7:0] rx_shift;
+    reg [2:0] bit_cnt;
 
-reg [7:0] clk_div_cnt;
+    reg [7:0] clk_div_cnt;
 
-reg spi_clk;
-reg prev_spi_clk;
+    reg sclk_rise_pulse;
+    reg sclk_fall_pulse;
 
-wire sclk_posedge;
-wire sclk_negedge;
+    // -------------------------------------------------
+    // SPI clock generator
+    // sclk toggles only during TRANSFER
+    // -------------------------------------------------
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            clk_div_cnt    <= 8'd0;
+            sclk           <= 1'b0;
+            sclk_rise_pulse <= 1'b0;
+            sclk_fall_pulse <= 1'b0;
+        end
+        else begin
+            sclk_rise_pulse <= 1'b0;
+            sclk_fall_pulse <= 1'b0;
 
-assign sclk_posedge = (prev_spi_clk == 1'b0) &&
-                      (spi_clk == 1'b1);
+            if (state == TRANSFER) begin
+                if (clk_div_cnt == 8'd3) begin
+                    clk_div_cnt <= 8'd0;
 
-assign sclk_negedge = (prev_spi_clk == 1'b1) &&
-                      (spi_clk == 1'b0);
-
-assign sclk = spi_clk;
-
-always @(posedge clk or posedge rst)
-begin
-    if(rst)
-    begin
-        clk_div_cnt  <= 8'd0;
-        spi_clk      <= 1'b0;
-        prev_spi_clk <= 1'b0;
-    end
-
-    else
-    begin
-        prev_spi_clk <= spi_clk;
-
-        if(state == TRANSFER)
-        begin
-            if(clk_div_cnt == 3)
-            begin
+                    if (sclk == 1'b0) begin
+                        sclk <= 1'b1;
+                        sclk_rise_pulse <= 1'b1;
+                    end
+                    else begin
+                        sclk <= 1'b0;
+                        sclk_fall_pulse <= 1'b1;
+                    end
+                end
+                else begin
+                    clk_div_cnt <= clk_div_cnt + 1'b1;
+                end
+            end
+            else begin
                 clk_div_cnt <= 8'd0;
-                spi_clk <= ~spi_clk;
-            end
-
-            else
-            begin
-                clk_div_cnt <= clk_div_cnt + 1'b1;
+                sclk <= 1'b0;
             end
         end
+    end
 
-        else
-        begin
-            clk_div_cnt <= 8'd0;
-            spi_clk <= 1'b0;
+    // -------------------------------------------------
+    // SPI control FSM
+    // Mode 0 style:
+    // - MOSI changes on falling edge
+    // - MISO sampled on rising edge
+    // -------------------------------------------------
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            state     <= IDLE;
+            mosi      <= 1'b0;
+            cs        <= 1'b1;
+            data_out  <= 8'h00;
+            busy      <= 1'b0;
+            done      <= 1'b0;
+            tx_shift  <= 8'h00;
+            rx_shift  <= 8'h00;
+            bit_cnt   <= 3'd0;
         end
-    end
-end
-
-always @(posedge clk or posedge rst)
-begin
-    if(rst)
-    begin
-        state <= IDLE;
-
-        cs <= 1'b1;
-        mosi <= 1'b0;
-
-        shift_reg <= 8'h00;
-        data_out <= 8'h00;
-
-        bit_cnt <= 3'd7;
-
-        busy <= 1'b0;
-        done <= 1'b0;
-    end
-
-    else
-    begin
-        case(state)
-
-        IDLE:
-        begin
-            cs <= 1'b1;
-            busy <= 1'b0;
+        else begin
             done <= 1'b0;
 
-            bit_cnt <= 3'd7;
+            case (state)
+                IDLE: begin
+                    cs   <= 1'b1;
+                    busy <= 1'b0;
+                    mosi <= 1'b0;
 
-            if(start)
-            begin
-                state <= LOAD;
-            end
-        end
-
-        LOAD:
-        begin
-            cs <= 1'b0;
-
-            busy <= 1'b1;
-
-            shift_reg <= data_in;
-
-            state <= TRANSFER;
-        end
-
-        TRANSFER:
-        begin
-            busy <= 1'b1;
-
-            if(sclk_negedge)
-            begin
-                mosi <= shift_reg[bit_cnt];
-            end
-
-            if(sclk_posedge)
-            begin
-                shift_reg[bit_cnt] <= miso;
-
-                if(bit_cnt == 0)
-                begin
-                    data_out <= shift_reg;
-                    state <= FINISH;
+                    if (start) begin
+                        state <= LOAD;
+                    end
                 end
 
-                else
-                begin
-                    bit_cnt <= bit_cnt - 1'b1;
+                LOAD: begin
+                    cs       <= 1'b0;
+                    busy     <= 1'b1;
+                    tx_shift <= data_in;
+                    rx_shift <= 8'h00;
+                    bit_cnt  <= 3'd7;
+
+                    // First bit must be valid before first rising edge
+                    mosi  <= data_in[7];
+
+                    state <= TRANSFER;
                 end
-            end
+
+                TRANSFER: begin
+                    busy <= 1'b1;
+
+                    // Present next bit on falling edge
+                    if (sclk_fall_pulse) begin
+                        mosi <= tx_shift[bit_cnt];
+                    end
+
+                    // Sample incoming bit on rising edge
+                    if (sclk_rise_pulse) begin
+                        rx_shift <= {rx_shift[6:0], miso};
+
+                        if (bit_cnt == 3'd0) begin
+                            data_out <= {rx_shift[6:0], miso};
+                            state    <= FINISH;
+                        end
+                        else begin
+                            bit_cnt <= bit_cnt - 1'b1;
+                        end
+                    end
+                end
+
+                FINISH: begin
+                    cs    <= 1'b1;
+                    busy  <= 1'b0;
+                    done  <= 1'b1;
+                    state <= IDLE;
+                end
+
+                default: begin
+                    state <= IDLE;
+                end
+            endcase
         end
-
-        FINISH:
-        begin
-            cs <= 1'b1;
-
-            busy <= 1'b0;
-            done <= 1'b1;
-
-            state <= IDLE;
-        end
-
-        default:
-        begin
-            state <= IDLE;
-        end
-
-        endcase
     end
-end
 
 endmodule
