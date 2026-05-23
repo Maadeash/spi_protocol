@@ -1,0 +1,134 @@
+module spi_slave(
+
+    input wire clk,
+    input wire rst,
+
+    input wire sclk,
+    input wire mosi,
+    input wire cs,
+
+    input wire [7:0] data_in,
+    input wire data_ready,
+
+    output reg miso,
+
+    output reg [7:0] data_out,
+    output reg data_valid
+);
+
+parameter IDLE     = 2'b00;
+parameter TRANSFER = 2'b01;
+parameter COMPLETE = 2'b10;
+
+reg [1:0] state;
+
+reg [7:0] shift_reg_tx;
+reg [7:0] shift_reg_rx;
+
+reg [2:0] bit_cnt;
+
+reg prev_sclk;
+reg prev_cs;
+
+wire sclk_posedge;
+wire sclk_negedge;
+
+assign sclk_posedge = (prev_sclk == 1'b0) &&
+                      (sclk == 1'b1);
+
+assign sclk_negedge = (prev_sclk == 1'b1) &&
+                      (sclk == 1'b0);
+
+always @(posedge clk or posedge rst)
+begin
+    if(rst)
+    begin
+        state <= IDLE;
+
+        prev_sclk <= 1'b0;
+        prev_cs <= 1'b1;
+
+        shift_reg_tx <= 8'h00;
+        shift_reg_rx <= 8'h00;
+
+        bit_cnt <= 3'd7;
+
+        miso <= 1'b0;
+
+        data_out <= 8'h00;
+        data_valid <= 1'b0;
+    end
+
+    else
+    begin
+        prev_sclk <= sclk;
+        prev_cs <= cs;
+
+        data_valid <= 1'b0;
+
+        case(state)
+
+        IDLE:
+        begin
+            bit_cnt <= 3'd7;
+
+            if(cs == 1'b0)
+            begin
+                if(data_ready)
+                begin
+                    shift_reg_tx <= data_in;
+                end
+
+                state <= TRANSFER;
+            end
+        end
+
+        TRANSFER:
+        begin
+            if(cs == 1'b1)
+            begin
+                state <= COMPLETE;
+            end
+
+            else
+            begin
+                if(sclk_posedge)
+                begin
+                    shift_reg_rx <=
+                    {shift_reg_rx[6:0], mosi};
+                end
+
+                if(sclk_negedge)
+                begin
+                    miso <= shift_reg_tx[7];
+
+                    shift_reg_tx <=
+                    {shift_reg_tx[6:0], 1'b0};
+
+                    if(bit_cnt != 0)
+                    begin
+                        bit_cnt <= bit_cnt - 1'b1;
+                    end
+                end
+            end
+        end
+
+        COMPLETE:
+        begin
+            data_out <= shift_reg_rx;
+
+            data_valid <= 1'b1;
+
+            state <= IDLE;
+        end
+
+        default:
+        begin
+            state <= IDLE;
+        end
+
+        endcase
+    end
+end
+
+endmodule
