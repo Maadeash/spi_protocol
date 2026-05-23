@@ -1,0 +1,129 @@
+module spi_tb;
+
+reg clk;
+reg rst;
+reg start;
+
+reg [7:0] master_data_in;
+
+wire [7:0] master_data_out;
+
+wire mosi;
+wire sclk;
+wire cs;
+wire miso;
+
+wire busy;
+wire done;
+
+reg [7:0] slave_data_in;
+reg data_ready;
+
+wire [7:0] slave_data_out;
+wire data_valid;
+
+initial
+    clk = 0;
+
+always #5 clk = ~clk;
+
+spi_master master_inst(
+
+    .clk(clk),
+    .rst(rst),
+    .start(start),
+    .data_in(master_data_in),
+
+    .miso(miso),
+
+    .mosi(mosi),
+    .sclk(sclk),
+    .cs(cs),
+
+    .data_out(master_data_out),
+    .busy(busy),
+    .done(done)
+);
+
+spi_slave slave_inst(
+
+    .clk(clk),
+    .rst(rst),
+
+    .sclk(sclk),
+    .mosi(mosi),
+    .cs(cs),
+
+    .data_in(slave_data_in),
+    .data_ready(data_ready),
+
+    .miso(miso),
+
+    .data_out(slave_data_out),
+    .data_valid(data_valid)
+);
+
+initial
+begin
+    $dumpfile("spi.vcd");
+    $dumpvars(0, spi_tb);
+end
+
+initial
+begin
+
+    rst = 1'b1;
+    start = 1'b0;
+
+    master_data_in = 8'hAA;
+    slave_data_in  = 8'hCC;
+
+    data_ready = 1'b1;
+
+    #20;
+    rst = 1'b0;
+
+    @(posedge clk);
+    start <= 1'b1;
+
+    @(posedge clk);
+    start <= 1'b0;
+
+    wait(done);
+
+    wait(data_valid);
+
+    $display("--------------------------------");
+
+    $display("MASTER SENT     = %h",
+              master_data_in);
+
+    $display("MASTER RECEIVED = %h",
+              master_data_out);
+
+    $display("SLAVE SENT      = %h",
+              slave_data_in);
+
+    $display("SLAVE RECEIVED  = %h",
+              slave_data_out);
+
+    $display("--------------------------------");
+
+    if(master_data_out == slave_data_in)
+        $display("MASTER RECEIVED CORRECT DATA");
+
+    else
+        $display("MASTER RECEIVED WRONG DATA");
+
+    if(slave_data_out == master_data_in)
+        $display("SLAVE RECEIVED CORRECT DATA");
+
+    else
+        $display("SLAVE RECEIVED WRONG DATA");
+
+    #100;
+    $finish;
+
+end
+
+endmodule
