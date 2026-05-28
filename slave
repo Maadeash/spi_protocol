@@ -1,118 +1,126 @@
-module spi_slave (
-    input  wire       clk,
-    input  wire       rst,
-
-    input  wire       sclk,
-    input  wire       mosi,
-    input  wire       cs,
-
-    input  wire [7:0] data_in,
-    input  wire       data_ready,
-
-    output reg        miso,
-    output reg [7:0]  data_out,
-    output reg        data_valid
+module spi_slave(
+  input wire clk,
+  input wire rst,
+  
+  input wire sclk,
+  input wire mosi,
+  input wire cs,
+  
+  input wire [7:0]data_in,
+  input wire data_ready,
+  
+  output reg miso,
+  output reg [7:0]data_out,
+  output reg data_valid
 );
 
-    localparam IDLE     = 2'b00;
-    localparam TRANSFER = 2'b01;
-    localparam COMPLETE = 2'b10;
-
-    reg [1:0] state;
-
-    reg [7:0] tx_shift;
-    reg [7:0] rx_shift;
-    reg [2:0] bit_cnt;
-
-    reg prev_sclk;
-    reg prev_cs;
-
-    wire sclk_posedge;
-    wire sclk_negedge;
-    wire cs_falling;
-    wire cs_rising;
-
-    assign sclk_posedge = (prev_sclk == 1'b0) && (sclk == 1'b1);
-    assign sclk_negedge = (prev_sclk == 1'b1) && (sclk == 1'b0);
-
-    assign cs_falling   = (prev_cs == 1'b1) && (cs == 1'b0);
-    assign cs_rising    = (prev_cs == 1'b0) && (cs == 1'b1);
-
-    always @(posedge clk or posedge rst) begin
-        if (rst) begin
-            state      <= IDLE;
-            prev_sclk  <= 1'b0;
-            prev_cs    <= 1'b1;
-
-            tx_shift   <= 8'h00;
-            rx_shift   <= 8'h00;
-            bit_cnt    <= 3'd7;
-
-            miso       <= 1'b0;
-            data_out   <= 8'h00;
-            data_valid <= 1'b0;
+  localparam idle=2'b00;
+  localparam transfer=2'b01;
+  localparam complete=2'b10;
+  
+  reg [1:0]state;
+  
+  reg [7:0]tx_shift;
+  reg [7:0]rx_shift;
+  reg [2:0]bit_cnt;
+  
+  reg prev_sclk;
+  reg prev_cs;
+  
+  wire sclk_posedge;
+  wire sclk_negedge;
+  wire cs_falling;
+  wire cs_rising;
+  
+  assign sclk_posedge=(prev_sclk==1'b0)&&(sclk==1'b1);
+  assign sclk_negedge=(prev_sclk==1'b1)&&(sclk==1'b0);
+  
+  assign cs_falling=(prev_cs==1'b1)&&(cs==1'b0);
+  assign cs_rising=(prev_cs==1'b0)&&(cs==1'b1);
+  
+  always @(posedge clk or posedge rst)
+    begin
+      if(rst)
+        begin
+          state<=idle;
+          prev_sclk<=1'b0;
+          prev_cs<=1'b1;
+          
+          tx_shift<=8'h00;
+          rx_shift<=8'h00;
+          bit_cnt<=3'd7;
+          
+          miso<=1'b0;
+          data_out<=8'h00;
+          data_valid<=1'b0;
         end
-        else begin
-            prev_sclk  <= sclk;
-            prev_cs    <= cs;
-            data_valid <= 1'b0;
-
-            case (state)
-                IDLE: begin
-                    bit_cnt <= 3'd7;
-
-                    if (cs_falling) begin
-                        rx_shift <= 8'h00;
-
-                        if (data_ready)
-                            tx_shift <= data_in;
+      else
+        begin
+          prev_sclk<=sclk;
+          prev_cs<=cs;
+          data_valid<=1'b0;
+          
+          case(state)
+            idle:
+              begin
+                bit_cnt<=3'd7;
+                
+                if(cs_falling)
+                  begin
+                    rx_shift<=8'h00;
+                    
+                    if(data_ready)
+                      tx_shift<=data_in;
+                    else
+                      tx_shift<=8'h00;
+                      
+                    miso<=data_ready?data_in[7]:1'b0;
+                    state<=transfer;
+                  end
+              end
+              
+            transfer:
+              begin
+                if(cs==1'b1)
+                  begin
+                    state<=complete;
+                  end
+                else
+                  begin
+                    if(sclk_posedge)
+                      begin
+                        rx_shift<={rx_shift[6:0],mosi};
+                        
+                        if(bit_cnt==3'd0)
+                          begin
+                            data_out<={rx_shift[6:0],mosi};
+                            data_valid<=1'b1;
+                            state<=complete;
+                          end
                         else
-                            tx_shift <= 8'h00;
-
-                        // Put first bit on MISO before first rising edge
-                        miso  <= data_ready ? data_in[7] : 1'b0;
-                        state <= TRANSFER;
-                    end
-                end
-
-                TRANSFER: begin
-                    if (cs == 1'b1) begin
-                        state <= COMPLETE;
-                    end
-                    else begin
-                        // Sample MOSI on rising edge
-                        if (sclk_posedge) begin
-                            rx_shift <= {rx_shift[6:0], mosi};
-
-                            if (bit_cnt == 3'd0) begin
-                                data_out   <= {rx_shift[6:0], mosi};
-                                data_valid <= 1'b1;
-                                state      <= COMPLETE;
-                            end
-                            else begin
-                                bit_cnt <= bit_cnt - 1'b1;
-                            end
-                        end
-
-                        // Change MISO on falling edge
-                        if (sclk_negedge) begin
-                            miso     <= tx_shift[7];
-                            tx_shift <= {tx_shift[6:0], 1'b0};
-                        end
-                    end
-                end
-
-                COMPLETE: begin
-                    if (cs_rising) begin
-                        state <= IDLE;
-                    end
-                end
-
-                default: begin
-                    state <= IDLE;
-                end
-            endcase
+                          begin
+                            bit_cnt<=bit_cnt-1'b1;
+                          end
+                      end
+                      
+                    if(sclk_negedge)
+                      begin
+                        tx_shift<={tx_shift[6:0],1'b0};
+                        miso<=tx_shift[6];
+                      end
+                  end
+              end
+              
+            complete:
+              begin
+                if(cs_rising)
+                  begin
+                    state<=idle;
+                  end
+              end
+              
+            default:state<=idle;
+          endcase
         end
-    end
-
+    end    
 endmodule
