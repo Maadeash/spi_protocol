@@ -1,236 +1,231 @@
-# SPI Protocol Design using Verilog
+# SPI Master-Slave RTL Design and Functional Verification using Verilog,SystemVerilog
 
-## Introduction
+## Overview
 
-SPI (Serial Peripheral Interface) is a synchronous serial communication protocol used for fast data transfer between a master device and one or more slave devices.
-
-SPI uses separate lines for clock and data transfer, making it faster than asynchronous communication protocols.
-
-SPI is widely used in:
-
-- Sensors
-- Flash memory
-- ADC/DAC interfaces
-- Display modules
-- FPGA communication
-- Embedded systems
-
-SPI mainly uses four signals:
-
-- MOSI (Master Out Slave In)
-- MISO (Master In Slave Out)
-- SCLK (Serial Clock)
-- CS (Chip Select)
-
-This project implements SPI Mode 0 communication between SPI master and SPI slave modules.
+This project implements a full-duplex SPI (Serial Peripheral Interface) communication system consisting of SPI Master and SPI Slave modules designed in Verilog HDL. The design was verified using a layered SystemVerilog verification environment featuring assertions,functional coverage,scoreboard-based checking and self-checking testbench architecture.
 
 ---
 
-# Features of SPI
+## Project Highlights
 
-- Synchronous serial communication
-- Full duplex communication
-- Master-slave architecture
-- High-speed communication
-- Simple hardware implementation
-- Edge-based data transfer
-
----
-
-# SPI Mode Used
-
-This project uses:
-
-- SPI Mode 0
-- Clock idle LOW
-- Data sampled on clock rising edge
-- Data shifted on clock falling edge
+- SPI Master RTL Design
+- SPI Slave RTL Design
+- Full-Duplex Communication
+- SCLK Generation Logic
+- MOSI and MISO Data Transfer
+- Chip Select (CS) Control
+- SystemVerilog Verification Environment
+- Functional Coverage Collection
+- Cross Coverage Implementation
+- SystemVerilog Assertions (SVA)
+- Scoreboard-Based Data Checking
+- Mailbox Communication
+- Synopsys VCS Simulation
+- Synopsys DVE Waveform Analysis
 
 ---
 
-# SPI Architecture
+## SPI Protocol
 
-The design consists of:
-
-- SPI Master
-- SPI Slave
-- Verilog Testbench
-
-The SPI master generates:
-
-- SCLK
-- CS
-- MOSI
-
-The SPI slave generates:
-
-- MISO
-
----
-
-# SPI Operation
-
-## Master Operation
-
-The SPI master performs the following operations:
-
-- Waits for start signal
-- Loads transmit data
-- Generates serial clock
-- Sends data through MOSI
-- Receives data through MISO
-- Indicates transfer completion
-
----
-
-## Slave Operation
-
-The SPI slave performs the following operations:
-
-- Detects chip select activation
-- Receives data from MOSI
-- Sends data through MISO
-- Stores received data
-- Indicates valid received data
-
----
-
-# Important SPI Signals
+SPI uses four signals:
 
 | Signal | Description |
-|--------|-------------|
-| clk | System clock |
-| rst | Reset signal |
-| start | Starts SPI transfer |
-| data_in | Parallel input data |
-| data_out | Parallel output data |
-| mosi | Master Out Slave In |
-| miso | Master In Slave Out |
-| sclk | Serial clock |
-| cs | Chip select |
-| busy | Transfer in progress |
-| done | Transfer complete |
-| data_ready | Slave data availability |
-| data_valid | Received data valid |
+|----------|----------|
+| MOSI | Master Out Slave In |
+| MISO | Master In Slave Out |
+| SCLK | Serial Clock |
+| CS | Chip Select |
+
+Protocol Configuration:
+
+- CPOL = 0
+- CPHA = 0
+- 8-bit Data Transfer
+- Full-Duplex Communication
 
 ---
 
-# SPI Master FSM
+## RTL Architecture
 
-The SPI master uses the following FSM states:
+### SPI Master
 
-## IDLE
-- Waits for start signal
+The SPI Master performs:
 
-## LOAD
-- Loads transmit data
-- Activates chip select
+- Clock Generation
+- Chip Select Control
+- MOSI Transmission
+- MISO Reception
+- Transfer Completion Detection
 
-## TRANSFER
-- Sends and receives serial data
-- Generates SPI clock
+### SPI Slave
 
-## FINISH
-- Ends communication
-- Returns to IDLE state
+The SPI Slave performs:
 
----
-
-# SPI Slave FSM
-
-The SPI slave uses the following FSM states:
-
-## IDLE
-- Waits for chip select activation
-
-## TRANSFER
-- Receives MOSI data
-- Sends MISO data
-
-## COMPLETE
-- Transfer completed
-- Waits for chip select release
+- MOSI Reception
+- MISO Transmission
+- Data Capture
+- Transfer Completion Detection
 
 ---
 
-# Clock Operation
+## Verification Environment
 
-In SPI Mode 0:
+The design was verified using a layered SystemVerilog verification environment.
 
-- MOSI data changes on falling edge of SCLK
-- MISO data is sampled on rising edge of SCLK
+### Verification Components
+
+- Interface
+- Transaction
+- Generator
+- Driver
+- Monitor
+- Scoreboard
+- Functional Coverage
+- Assertions
+- Testbench
+
+### Verification Flow
+
+Generator
+
+↓
+
+Driver
+
+↓
+
+SPI DUT
+
+↓
+
+Monitor
+
+↓
+
+Scoreboard
 
 ---
 
-# Tools Used
+## Functional Coverage
 
-- Vivado
+Functional coverage was implemented using SystemVerilog covergroups.
+
+### Coverage Points
+
+#### MASTER_TX
+
+- LOW Range
+- MID Range
+- HIGH Range
+
+#### SLAVE_TX
+
+- LOW Range
+- MID Range
+- HIGH Range
+
+#### Corner Cases
+
+- 0x00
+- 0xFF
+- 0xAA
+- 0x55
+
+#### Cross Coverage
+
+MASTER_TX × SLAVE_TX
+
+This ensures complete verification of master-slave transaction combinations.
 
 ---
 
-# Languages Used
+## Assertions
 
-## Design
-- Verilog HDL
+The following SystemVerilog Assertions were implemented:
 
-## Testbench
-- Verilog
-
----
-
-# Testbench
-
-A Verilog testbench was created to verify SPI communication between master and slave modules.
-
-The testbench verifies:
-
-- SPI clock generation
-- MOSI transmission
-- MISO reception
-- Chip select operation
-- Data transfer correctness
+- CS remains HIGH during reset
+- DONE remains LOW during reset
+- SCLK remains LOW when CS is HIGH
+- CS returns HIGH after transaction completion
 
 ---
 
+## Scoreboard Checks
 
-# Synthesized and Implemented Design
+The scoreboard verifies successful full-duplex communication.
+
+Checks performed:
+
+```text
+MASTER_RX == SLAVE_TX
+
+SLAVE_RX == MASTER_TX
+```
+
+All received data is automatically compared against expected values.
+
+---
+
+## Simulation Results
+
+| Metric | Result |
+|----------|----------|
+| Functional Coverage | PASS |
+| Assertions | PASS |
+| Scoreboard | PASS |
+| Master Receive Check | PASS |
+| Slave Receive Check | PASS |
+
+---
+
+# Synthesized and Implemented Design(Using Vivado)
 
 <img width="1485" height="519" alt="image" src="https://github.com/user-attachments/assets/9ce50914-d6b8-44b2-bc85-048e9b389f4d" />
 
 ---
 
+## Synopsys VCS Coverage Results
 
-# Output Waveforms
-
-<img width="1553" height="716" alt="image" src="https://github.com/user-attachments/assets/35015d98-c004-4852-96eb-641eaa7816d8" />
+<img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/7d5cd2ec-a341-4a1e-a631-6878b4e65396" />
 
 
 ---
 
-# Source Files
+## Synopsys DVE Waveform
 
-## Design Files
+<img width="1600" height="852" alt="image" src="https://github.com/user-attachments/assets/b4461788-8252-4a04-a52c-063526fc13fb" />
+
+
+---
+
+## Source Files
+
+### RTL Design
 
 - spi_master.v
 - spi_slave.v
 
-## Testbench File
+### Verification
 
-- spi_tb.v
-
----
-
-
-# Applications of SPI
-
-- Flash memory communication
-- Sensor interfacing
-- ADC/DAC communication
-- Display modules
-- FPGA peripheral communication
+- spi_if.sv
+- spi_transaction.sv
+- spi_generator.sv
+- spi_driver.sv
+- spi_monitor.sv
+- spi_scoreboard.sv
+- spi_coverage.sv
+- spi_assertions.sv
+- tb_spi_vip.sv
 
 ---
 
-# Conclusion
+## Tools Used
 
-SPI protocol was successfully designed using Verilog HDL. The project includes SPI master and SPI slave modules operating in SPI Mode 0. Simulation results verified correct serial data communication between master and slave using the Verilog testbench.
+- Vivado
+- Synopsys VCS
+
+---
+
+## Conclusion
+
+A complete SPI Master-Slave communication system was designed using Verilog HDL and verified using a layered SystemVerilog verification environment. Verification included assertions,functional coverage,cross coverage,scoreboard-based checking and corner-case testing. Simulation results demonstrated successful full-duplex SPI communication and protocol compliance.
